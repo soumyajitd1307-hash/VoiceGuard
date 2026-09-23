@@ -39,6 +39,11 @@ def _get_optional_float(name: str) -> float | None:
         return None
 
 
+_VALID_STORAGE_BACKENDS = ("memory", "sqlite")
+_VALID_AUTH_MODES = ("disabled", "token", "strict")
+_VALID_ENVS = ("development", "production")
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime configuration for the synthetic-voice detection service."""
@@ -57,6 +62,16 @@ class Settings:
     embedder_version: str = field(
         default_factory=lambda: _get_str("VG_EMBEDDER_VERSION", "mock-spectral-v0.1.0")
     )
+
+    # ---- Part 8: real-model weights paths (explicit opt-in; mock by default) ----
+    # Detector weights: JSON file consumed by RealDetectorAdapter.
+    # VG_MODEL_NAME="real" requires VG_DETECTOR_MODEL, else config fails.
+    # The expected weights version travels in VG_MODEL_VERSION.
+    detector_model: str = field(default_factory=lambda: _get_str("VG_DETECTOR_MODEL", ""))
+    # Embedder weights: JSON file consumed by RealEmbedderAdapter.
+    # VG_EMBEDDER_NAME="real" requires VG_EMBEDDER_MODEL, else config fails.
+    # The expected weights version travels in VG_EMBEDDER_VERSION.
+    embedder_model: str = field(default_factory=lambda: _get_str("VG_EMBEDDER_MODEL", ""))
 
     # Decision thresholds applied to synthetic_probability (0..1).
     synthetic_threshold: float = field(
@@ -87,6 +102,25 @@ class Settings:
 
     log_level: str = field(default_factory=lambda: _get_str("VG_LOG_LEVEL", "INFO"))
 
+    # ---- Part 7: persistence / auth hardening (safe dev defaults) ----
+    # Storage backend: "memory" preserves current test/dev behavior;
+    # "sqlite" enables restart-safe file persistence (stdlib sqlite3).
+    storage_backend: str = field(
+        default_factory=lambda: _get_str("VG_STORAGE_BACKEND", "memory"))
+    # Filesystem path used only when storage_backend == "sqlite".
+    storage_path: str = field(
+        default_factory=lambda: _get_str("VG_STORAGE_PATH", ""))
+    # Runtime environment label. "production" fails closed unless storage
+    # and authentication are explicitly configured (see auth.requirements).
+    env: str = field(default_factory=lambda: _get_str("VG_ENV", "development"))
+    # Auth mode: "disabled" (trusted-internal dev default), "token"
+    # (shared development/test token via VG_AUTH_TOKEN asserting the
+    # VG_DEV_OWNER identity -- dev/test only, never production auth),
+    # "strict" (reject everything: fail-closed placeholder for a real IdP).
+    auth_mode: str = field(default_factory=lambda: _get_str("VG_AUTH_MODE", "disabled"))
+    auth_token: str = field(default_factory=lambda: _get_str("VG_AUTH_TOKEN", ""))
+    dev_owner: str = field(default_factory=lambda: _get_str("VG_DEV_OWNER", ""))
+
     def __post_init__(self) -> None:
         if not 0.0 < self.real_threshold < self.synthetic_threshold < 1.0:
             raise ValueError(
@@ -101,6 +135,32 @@ class Settings:
             raise ValueError(
                 "VG_SIMILARITY_THRESHOLD must lie in [-1.0, 1.0] "
                 f"(got {self.similarity_threshold})"
+            )
+        if self.storage_backend not in _VALID_STORAGE_BACKENDS:
+            raise ValueError(
+                f"VG_STORAGE_BACKEND must be one of {list(_VALID_STORAGE_BACKENDS)} "
+                f"(got {self.storage_backend!r})"
+            )
+        for backend_field, backend_value in (
+                ("VG_MODEL_NAME", self.model_name),
+                ("VG_EMBEDDER_NAME", self.embedder_name)):
+            if backend_value.strip().lower() not in ("mock", "real"):
+                raise ValueError(
+                    f"{backend_field} must be 'mock' or 'real' "
+                    f"(got {backend_value!r})"
+                )
+        if self.model_name.strip().lower() == "real" and not self.detector_model.strip():
+            raise ValueError("VG_MODEL_NAME=real requires VG_DETECTOR_MODEL weights path.")
+        if self.embedder_name.strip().lower() == "real" and not self.embedder_model.strip():
+            raise ValueError("VG_EMBEDDER_NAME=real requires VG_EMBEDDER_MODEL weights path.")
+        if self.auth_mode not in _VALID_AUTH_MODES:
+            raise ValueError(
+                f"VG_AUTH_MODE must be one of {list(_VALID_AUTH_MODES)} "
+                f"(got {self.auth_mode!r})"
+            )
+        if self.env not in _VALID_ENVS:
+            raise ValueError(
+                f"VG_ENV must be one of {list(_VALID_ENVS)} (got {self.env!r})"
             )
 
 

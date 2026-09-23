@@ -32,10 +32,15 @@ def get_embedder(settings: Settings | None = None) -> SpeakerEmbeddingModel:
         name = (cfg.embedder_name or "mock").strip().lower()
         if name == "mock":
             model: SpeakerEmbeddingModel = MockSpectralEmbedder(version=cfg.embedder_version)
+        elif name == "real":
+            # Lazy import: keeps the mock path dependency-free.
+            from backend.models.real_embedder import RealEmbedderAdapter
+
+            model = RealEmbedderAdapter(
+                weights_path=cfg.embedder_model, version=cfg.embedder_version)
         else:
             raise ModelError(
-                f"Unknown VG_EMBEDDER_NAME={name!r}. Only 'mock' ships with this repo. "
-                "Add a real adapter implementing SpeakerEmbeddingModel and register it here."
+                f"Unknown VG_EMBEDDER_NAME={name!r}. Expected 'mock' or 'real'."
             )
         try:
             model.load()

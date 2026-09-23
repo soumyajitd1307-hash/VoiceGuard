@@ -70,6 +70,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newRiskLevel = getRiskLevel(update.risk);
       const formattedTime = formatSeconds(update.timestamp);
 
+      // Backend omits absent ML signals by design (never zero-filled);
+      // retain the last known values so state never degrades to undefined.
+      const syntheticProbability = update.syntheticProbability ?? current.syntheticProbability;
+      const speakerConsistency = update.speakerConsistency ?? current.speakerConsistency;
+      const contextRisk = update.contextRisk ?? current.contextRisk;
+
       // Check if new detection event should be added
       const existingEvents = [...current.detectionEvents];
       const isNewTimestamp = !existingEvents.some(e => Math.abs(e.timestamp - update.timestamp) < 2);
@@ -79,7 +85,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let eventType: DetectionEvent['eventType'] = 'acoustic_drift';
 
         if (update.risk >= 70) {
-          desc = `POSSIBLE SYNTHETIC VOICE: High-probability vocoder artifacts detected (${update.syntheticProbability}%).`;
+          desc = `POSSIBLE SYNTHETIC VOICE: High-probability vocoder artifacts detected (${syntheticProbability}%).`;
           eventType = 'deepfake_confirmed';
         } else if (update.risk >= 40) {
           desc = `Harmonics anomaly: Pitch flattening variance outside biological vocal tract standard.`;
@@ -92,7 +98,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timestamp: update.timestamp,
           formattedTime,
           risk: update.risk,
-          syntheticProbability: update.syntheticProbability,
+          syntheticProbability,
           severity: newRiskLevel,
           eventType,
           description: desc,
@@ -107,7 +113,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         {
           timestamp: update.timestamp,
           risk: update.risk,
-          syntheticProbability: update.syntheticProbability
+          syntheticProbability
         }
       ].slice(-30); // keep last 30 data points
 
@@ -116,9 +122,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         durationSeconds: Math.max(current.durationSeconds, update.timestamp),
         currentRisk: update.risk,
         currentRiskLevel: newRiskLevel,
-        syntheticProbability: update.syntheticProbability,
-        speakerConsistency: update.speakerConsistency,
-        contextRisk: update.contextRisk,
+        syntheticProbability,
+        speakerConsistency,
+        contextRisk,
         confidence: update.confidence,
         monitoringState: update.monitoringState || (update.risk >= 70 ? 'ALERT_TRIGGERED' : update.risk >= 40 ? 'SUSPICIOUS' : 'MONITORING_ACTIVE'),
         status: update.risk >= 70 ? 'FLAGGED' : current.status === 'FLAGGED' ? 'FLAGGED' : 'ACTIVE',
@@ -134,7 +140,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           callId: update.callId,
           callerName: current.caller.name,
           risk: update.risk,
-          syntheticProbability: update.syntheticProbability,
+          syntheticProbability,
           detectionTime: formattedTime,
           confidence: update.confidence,
           message: 'POSSIBLE SYNTHETIC VOICE DETECTED',

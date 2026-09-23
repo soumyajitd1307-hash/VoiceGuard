@@ -95,11 +95,15 @@ class Backend3Pipeline:
         min_speech_s: float | None = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self._detector = detector or SyntheticVoiceDetector(self.settings)
-        self._embedder = embedding_service or SpeakerEmbeddingService(
-            self.settings, min_speech_s=min_speech_s
-        )
-        self._similarity = similarity_service or SpeakerSimilarityService(self.settings)
+        # NOTE: explicit None checks (never `or`): injected doubles must
+        # never be discarded just because they define __len__/__bool__.
+        self._detector = (detector if detector is not None
+                          else SyntheticVoiceDetector(self.settings))
+        self._embedder = (embedding_service if embedding_service is not None
+                          else SpeakerEmbeddingService(
+                              self.settings, min_speech_s=min_speech_s))
+        self._similarity = (similarity_service if similarity_service is not None
+                            else SpeakerSimilarityService(self.settings))
 
     def process_chunk(
         self,
