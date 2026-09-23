@@ -1,0 +1,3 @@
+# Backend 3 (ML layer) — stdlib only for the mock implementation.
+# A future real model would add e.g.: numpy, onnxruntime  OR  torch, librosa
+# FastAPI adapter is optional:  pip install fastapi pydantic uvicorn
