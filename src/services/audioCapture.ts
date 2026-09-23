@@ -101,7 +101,7 @@ class VoiceGuardCapture extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('voiceguard-capture', new VoiceGuardCapture());
+registerProcessor('voiceguard-capture', VoiceGuardCapture);
 `;
 
 class AudioCaptureService {
@@ -117,6 +117,14 @@ class AudioCaptureService {
   /** Fractional input position already consumed (resampler continuity). */
   private consumedPos = 0;
   private inputRate = 0;
+
+  /**
+   * Startup generation: bumped by stop() and by each start() entry, so an
+   * in-flight start() can detect it was cancelled (external end/unmount or
+   * a superseding start) and release partial resources instead of
+   * committing an orphaned microphone.
+   */
+  private generation = 0;
 
   private framesEmitted = 0;
   private bytesEmitted = 0;
@@ -155,6 +163,10 @@ class AudioCaptureService {
     }
 
     let stream: MediaStream;
+    // Capture the generation: any stop() (or superseding start()) from here
+    // on invalidates this attempt — checked after every await below.
+    this.generation += 1;
+    const myGeneration = this.generation;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -171,11 +183,22 @@ class AudioCaptureService {
           'Grant mic access and retry.',
       );
     }
+    if (myGeneration !== this.generation) {
+      // Stopped (or superseded) while awaiting the microphone: release the
+      // track and abort before committing any state.
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error('audioCapture: start cancelled (stop requested during startup)');
+    }
 
     const ctx = new AudioCtor({ latencyHint: 'interactive' });
     try {
       // Must resume explicitly: browsers create it suspended until a gesture.
       await ctx.resume();
+      if (myGeneration !== this.generation) {
+        stream.getTracks().forEach((t) => t.stop());
+        await ctx.close().catch(() => undefined);
+        throw new Error('audioCapture: start cancelled (stop requested during startup)');
+      }
       if (!ctx.audioWorklet) {
         throw new Error('audioCapture: AudioWorklet unavailable in this browser');
       }
@@ -184,6 +207,12 @@ class AudioCaptureService {
       });
       const url = URL.createObjectURL(blob);
       await ctx.audioWorklet.addModule(url);
+      if (myGeneration !== this.generation) {
+        stream.getTracks().forEach((t) => t.stop());
+        URL.revokeObjectURL(url);
+        await ctx.close().catch(() => undefined);
+        throw new Error('audioCapture: start cancelled (stop requested during startup)');
+      }
 
       const source = ctx.createMediaStreamSource(stream);
       const node = new AudioWorkletNode(ctx, 'voiceguard-capture');
@@ -266,6 +295,9 @@ class AudioCaptureService {
 
   public stop(): void {
     // Idempotent: safe to call when already stopped or mid-stream.
+    // Bumping the generation first invalidates any in-flight start(), which
+    // releases its partial resources and aborts instead of committing state.
+    this.generation += 1;
     try {
       this.node?.port.close();
       this.node?.disconnect();
