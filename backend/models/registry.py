@@ -27,10 +27,15 @@ def get_model(settings: Settings | None = None) -> SyntheticVoiceModel:
         name = (cfg.model_name or "mock").strip().lower()
         if name == "mock":
             model: SyntheticVoiceModel = MockHeuristicModel(version=cfg.model_version)
+        elif name == "real":
+            # Lazy import: keeps the mock path dependency-free.
+            from backend.models.real_detector import RealDetectorAdapter
+
+            model = RealDetectorAdapter(
+                weights_path=cfg.detector_model, version=cfg.model_version)
         else:
             raise ModelError(
-                f"Unknown VG_MODEL_NAME={name!r}. Only 'mock' ships with this repo. "
-                "Add a real adapter implementing SyntheticVoiceModel and register it here."
+                f"Unknown VG_MODEL_NAME={name!r}. Expected 'mock' or 'real'."
             )
         try:
             model.load()
