@@ -7,6 +7,7 @@ import { formatSeconds } from '../../utils/risk';
 
 interface HomeScreenProps {
   onStartCall: () => void;
+  startDisabled?: boolean;
   onOpenCallHistory: () => void;
   onOpenCallDetails: (call: Call) => void;
   recentCalls: Call[];
@@ -14,6 +15,7 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onStartCall,
+  startDisabled = false,
   onOpenCallHistory,
   onOpenCallDetails,
   recentCalls
@@ -100,13 +102,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       {/* Large Start Secure Call CTA Button */}
       <button
         onClick={onStartCall}
+        disabled={startDisabled}
         style={{
           background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
           border: 'none',
           borderRadius: '16px',
           padding: '18px 20px',
           color: '#ffffff',
-          cursor: 'pointer',
+          cursor: startDisabled ? 'wait' : 'pointer',
+          opacity: startDisabled ? 0.6 : 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
