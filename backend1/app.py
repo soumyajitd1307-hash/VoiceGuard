@@ -16,10 +16,13 @@ import logging
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from backend2.buffer import AudioBufferError, get_buffer_manager
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend1")
 
 app = FastAPI(title="VoiceGuard Backend 1 — Audio Ingestion")
+buffer_manager = get_buffer_manager()
 
 
 @app.get("/health")
@@ -49,6 +52,15 @@ async def ws_audio(websocket: WebSocket) -> None:
                     seq,
                     len(data),
                 )
+                try:
+                    buffer_manager.append(session_id, data)
+                except AudioBufferError as exc:
+                    logger.warning(
+                        "audio buffer append failed: session_id=%s seq=%d error=%s",
+                        session_id,
+                        seq,
+                        exc,
+                    )
                 await websocket.send_json({"type": "ack", "seq": seq})
                 seq += 1
             elif "text" in message and message["text"] is not None:
