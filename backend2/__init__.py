@@ -4,6 +4,10 @@ This package manages audio ingestion buffering, stream segmentation,
 voice activity detection (VAD), and speech-ready handoff to Backend 3.
 """
 
+from backend2.b3_handoff import (
+    detect_with_b3,
+    handoff_to_b3,
+)
 from backend2.buffer import (
     AudioBufferError,
     BufferOverflowError,
@@ -44,4 +48,6 @@ __all__ = [
     "compute_frame_rms",
     "compute_vad",
     "build_processed_speech_chunk",
+    "handoff_to_b3",
+    "detect_with_b3",
 ]
