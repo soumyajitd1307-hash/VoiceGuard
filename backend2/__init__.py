@@ -13,6 +13,13 @@ from backend2.buffer import (
     get_buffer_manager,
     reset_buffer_manager,
 )
+from backend2.preprocessing import (
+    AudioValidationError,
+    PreprocessedAudioWindow,
+    extract_audio_window,
+    preprocess_pcm16,
+    validate_pcm16_audio,
+)
 
 __all__ = [
     "AudioBufferError",
@@ -22,4 +29,9 @@ __all__ = [
     "SessionBufferManager",
     "get_buffer_manager",
     "reset_buffer_manager",
+    "AudioValidationError",
+    "PreprocessedAudioWindow",
+    "extract_audio_window",
+    "preprocess_pcm16",
+    "validate_pcm16_audio",
 ]
