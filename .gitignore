@@ -1,0 +1,30 @@
+# Dependency directories
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Vite cache
+.vite/
+
+# Environment files (copy .env.example and fill in values)
+.env
+.env.local
+.env.production
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Editor directories
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
