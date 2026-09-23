@@ -13,6 +13,7 @@ from backend2.buffer import (
     get_buffer_manager,
     reset_buffer_manager,
 )
+from backend2.packaging import build_processed_speech_chunk
 from backend2.preprocessing import (
     AudioValidationError,
     PreprocessedAudioWindow,
@@ -42,4 +43,5 @@ __all__ = [
     "VADResult",
     "compute_frame_rms",
     "compute_vad",
+    "build_processed_speech_chunk",
 ]
