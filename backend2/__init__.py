@@ -20,6 +20,11 @@ from backend2.preprocessing import (
     preprocess_pcm16,
     validate_pcm16_audio,
 )
+from backend2.vad import (
+    VADResult,
+    compute_frame_rms,
+    compute_vad,
+)
 
 __all__ = [
     "AudioBufferError",
@@ -34,4 +39,7 @@ __all__ = [
     "extract_audio_window",
     "preprocess_pcm16",
     "validate_pcm16_audio",
+    "VADResult",
+    "compute_frame_rms",
+    "compute_vad",
 ]
