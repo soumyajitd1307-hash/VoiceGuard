@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Call, RiskUpdate, DetectionEvent, SecurityAlert, Evidence, WSConnectionStatus, SystemStatus } from '../types';
 import { wsService } from '../services/websocket';
 import { demoSimulator } from '../services/demoSimulator';
+import { audioCapture } from '../services/audioCapture';
+import { audioStream } from '../services/audioStream';
 import { MOCK_ACTIVE_CALLS, MOCK_CALL_HISTORY, INITIAL_SYSTEM_STATUS, INITIAL_EVIDENCE_1042 } from '../services/mockData';
 import { getRiskLevel, formatSeconds } from '../utils/risk';
 
@@ -20,7 +22,7 @@ interface CallContextType {
   detectionEventsLog: DetectionEvent[];
   // Actions
   selectCall: (callId: string) => void;
-  startCall: (callerName?: string) => void;
+  startCall: (callerName?: string) => string;
   endCall: (callId?: string) => void;
   dismissAlert: () => void;
   openInvestigation: (call: Call) => void;
@@ -184,11 +186,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [handleRiskUpdate, isDemoMode]);
 
+  // Backend 1 live-audio teardown on provider unmount ONLY. This must stay a
+  // mount/unmount effect: depending on risk updates here (securityAlert /
+  // handleRiskUpdate / isDemoMode / demo timeline) would kill a live
+  // microphone + audio socket mid-call whenever a security alert fires.
+  useEffect(() => {
+    return () => {
+      audioCapture.stop();
+      audioStream.disconnect();
+    };
+  }, []);
+
   const selectCall = (callId: string) => {
     setCurrentCallId(callId);
   };
 
-  const startCall = (callerName: string = 'Rahul') => {
+  const startCall = (callerName: string = 'Rahul'): string => {
     const newId = (1045 + Math.floor(Math.random() * 100)).toString();
     const newCall: Call = {
       id: newId,
@@ -228,12 +241,21 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isDemoMode) {
       demoSimulator.start(newId);
     }
+
+    return newId;
   };
 
   const endCall = (callId?: string) => {
     const targetId = callId || currentCallId;
     const callToEnd = activeCalls.find(c => c.id === targetId);
     if (!callToEnd) return;
+
+    // Backend 1 live-audio teardown (idempotent by design of both services).
+    // Centralized here so audio cleanup cannot be skipped when a call is
+    // terminated from another existing path (Dashboard terminate,
+    // InvestigationModal, MobileApp). Order: capture first, then socket.
+    audioCapture.stop();
+    audioStream.disconnect();
 
     const endedCall: Call = {
       ...callToEnd,

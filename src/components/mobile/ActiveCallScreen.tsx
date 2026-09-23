@@ -6,21 +6,57 @@ import { RiskGauge } from '../common/RiskGauge';
 import { CallTimer } from '../common/CallTimer';
 import { getRiskLevel, getRiskTheme, getRiskStatusSummary } from '../../utils/risk';
 
+/**
+ * Real Backend 1 audio transport state, owned by MobileApp and derived
+ * only from audioCapture/audioStream lifecycle events (never simulated).
+ *   connecting    — start in progress (connect/capture awaiting)
+ *   active        — capture running AND socket open (frames flowing)
+ *   disconnected  — startup failure, mid-call drop, cleanup, or no session
+ */
+export type LiveAudioState = 'connecting' | 'active' | 'disconnected';
+
 interface ActiveCallScreenProps {
   call: Call;
   onEndCall: () => void;
   onOpenEvidence?: () => void;
+  audioState: LiveAudioState;
 }
+
+const AUDIO_STATUS_META: Record<
+  LiveAudioState,
+  { label: string; color: string; bg: string; border: string }
+> = {
+  connecting: {
+    label: 'Microphone connecting',
+    color: '#fbbf24',
+    bg: 'rgba(245, 158, 11, 0.12)',
+    border: 'rgba(245, 158, 11, 0.35)'
+  },
+  active: {
+    label: 'Microphone active',
+    color: '#34d399',
+    bg: 'rgba(16, 185, 129, 0.12)',
+    border: 'rgba(16, 185, 129, 0.35)'
+  },
+  disconnected: {
+    label: 'Audio connection disconnected/error',
+    color: '#f87171',
+    bg: 'rgba(239, 68, 68, 0.12)',
+    border: 'rgba(239, 68, 68, 0.4)'
+  }
+};
 
 export const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   call,
   onEndCall,
-  onOpenEvidence
+  onOpenEvidence,
+  audioState
 }) => {
   const isHigh = call.currentRiskLevel === 'HIGH';
   const isSuspicious = call.currentRiskLevel === 'MEDIUM';
   const theme = getRiskTheme(call.currentRiskLevel);
   const summary = getRiskStatusSummary(call.currentRisk, call.confidence);
+  const audioStatus = AUDIO_STATUS_META[audioState];
 
   // Live animated voice waveform simulation for the active call
   const [waveHeights, setWaveHeights] = useState<number[]>([12, 24, 38, 18, 42, 28, 14, 32, 20]);
@@ -92,6 +128,34 @@ export const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-dim)' }}>
           <Globe size={12} />
           <span>{call.caller.language}</span>
+        </div>
+      </div>
+
+      {/* Compact live audio/microphone status (real Backend 1 transport state) */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px' }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 10px',
+            borderRadius: '14px',
+            background: audioStatus.bg,
+            border: `1px solid ${audioStatus.border}`
+          }}
+        >
+          <Mic size={11} style={{ color: audioStatus.color, flexShrink: 0 }} />
+          <span
+            style={{
+              fontSize: '10px',
+              fontWeight: 800,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: audioStatus.color
+            }}
+          >
+            {audioStatus.label}
+          </span>
         </div>
       </div>
 

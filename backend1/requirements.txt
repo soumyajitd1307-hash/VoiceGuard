@@ -1,0 +1,3 @@
+fastapi
+uvicorn
+websockets  # required: uvicorn cannot serve WebSocket endpoints without a WS library
