@@ -184,6 +184,24 @@ if _FASTAPI_AVAILABLE:
     def terminate_call(call_id: str, request: Request) -> dict:
         return _as_response(lambda: view_terminate(get_call_service(), call_id, _owner(request)))
 
+    @api_router.post("/calls/{call_id}/chunks")
+    async def ingest_chunk(call_id: str, request: Request) -> dict:
+        """Live-driver ingest (Prompt 5): one B2-packaged chunk dict.
+
+        Consumed by the Backend 1 pipeline driver, not by browsers.
+        Runs the existing process_call_chunk path (B3 + B4); new code
+        here is transport only — no risk math, no detection logic.
+        """
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="body must be a JSON object")
+        from backend.call_service import view_ingest_chunk
+
+        return _as_response(
+            lambda: view_ingest_chunk(
+                get_call_service(), call_id, payload, _owner(request)))
+
     @api_router.post("/calls")
     def create_call(body: CreateCallBody, request: Request) -> dict:
         # Body owner_id is ignored under authentication (anti-spoofing).
@@ -193,7 +211,7 @@ if _FASTAPI_AVAILABLE:
 
     @api_router.get("/system/status")
     def get_system_status() -> dict:
-        return _as_response(view_system_status(get_call_service()))
+        return _as_response(lambda: view_system_status(get_call_service()))
 
     ws_router = APIRouter(tags=["voiceguard-ws"])
 
@@ -203,7 +221,12 @@ if _FASTAPI_AVAILABLE:
 
         Ownership is verified before subscribing: unauthenticated or
         foreign calls close with 4401 (indistinguishable by design).
+
+        The socket is accepted FIRST because ASGI/uvicorn translates a
+        close-before-accept into an opaque HTTP 403 at handshake time,
+        which would hide the designed 4401 verdict from the client.
         """
+        await websocket.accept()
         try:
             principal = authenticate(dict(websocket.headers), _settings)
         except AuthError:

@@ -17,6 +17,7 @@ vectors, audio, profiles, owners or debug objects.
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 import threading
@@ -122,15 +123,17 @@ async def websocket_endpoint(websocket: Any, call_id: str,
                              manager: WsConnectionManager) -> None:
     """Starlette/FastAPI adapter: one socket, one call subscription.
 
+    The caller MUST accept the socket first: closing an unaccepted
+    socket surfaces as an opaque HTTP 403 at handshake time (uvicorn
+    translates close-before-accept), hiding the designed close code.
     Imported framework-free; the ``websocket`` object only needs
-    ``accept()``, ``send_json()`` and ``receive_text()`` (a fake covers
-    tests). Closes cleanly when the client disconnects.
+    ``send_json()`` and ``receive_text()`` (a fake covers tests).
+    Closes cleanly when the client disconnects.
     """
     try:
         from starlette.websockets import WebSocketDisconnect  # lazy: optional dep
     except ImportError as exc:
         raise ImportError("Install fastapi/starlette for WebSocket transport.") from exc
-    await websocket.accept()
     queue: list = []
 
     def _send(message: dict) -> None:
@@ -140,7 +143,12 @@ async def websocket_endpoint(websocket: Any, call_id: str,
     try:
         while True:
             try:
-                await websocket.receive_text()  # heartbeat/ignore inbound
+                # Pump queued updates at least once per second even when the
+                # client sends no heartbeat: silent browsers must still
+                # receive RiskUpdates in real time, not only after talking.
+                await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+            except asyncio.TimeoutError:
+                pass
             except WebSocketDisconnect:
                 break
             while queue:

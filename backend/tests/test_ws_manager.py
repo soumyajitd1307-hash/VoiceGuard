@@ -151,7 +151,8 @@ class TestWsConnectionManager(unittest.TestCase):
             return manager, socket
 
         manager, socket = asyncio.run(_run())
-        self.assertTrue(socket.accepted)
+        # NB: the endpoint no longer accepts (caller accepts first so that
+        # close codes like 4401 survive instead of degrading to HTTP 403).
         self.assertEqual(manager.active_connections(), 0)  # cleaned up
         manager2 = WsConnectionManager()
         socket2 = FakeWebSocket(["ping", "ping", "disconnect"])
