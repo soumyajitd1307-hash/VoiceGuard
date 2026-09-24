@@ -3,7 +3,7 @@
 Produces the EXISTING frontend shape (``src/types/index.ts``)::
 
     {type, callId, timestamp, risk, syntheticProbability, speakerConsistency,
-     contextRisk, confidence, monitoringState}
+     contextRisk, confidence, monitoringState, is_mock}
 
 Rules (no fabrication):
     * ``risk_score`` None -> raise ``ValidationError`` (B4 does not emit
@@ -23,11 +23,9 @@ Rules (no fabrication):
     * B3-only metrics (frequencyArtifacts/prosodyAnomaly/spectralFlux) are
       omitted: B3 emits no such signals and they are not invented here.
 
-MOCK SAFETY: the frontend ``RiskUpdate`` type has no provenance field, so
-mock visibility lives on ``RiskAssessment`` (``is_mock``/``provenance``).
-This adapter is deliberately lossy about provenance; Part 5 must add an
-additive provenance field to the transport contract. No raw embeddings,
-audio or profiles ever appear here.
+MOCK SAFETY: the frontend ``RiskUpdate`` type carries ``is_mock`` (additive,
+verbatim from the assessment) so live displays can badge development
+provenance. It must never be stripped, defaulted, or reinterpreted here.
 """
 from __future__ import annotations
 
@@ -102,6 +100,9 @@ def to_risk_update(
         "confidence": confidence_label,
         "monitoringState": monitoring_state,
         "contextRisk": round(float(resolved_context), 2),
+        # Additive provenance (existing is_mock, never a second source of
+        # truth): lets the frontend badge development-heuristic output.
+        "is_mock": bool(assessment.is_mock),
     }
     if assessment.synthetic_probability is not None:
         update["syntheticProbability"] = round(assessment.synthetic_probability * 100.0, 2)

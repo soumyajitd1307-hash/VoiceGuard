@@ -218,5 +218,28 @@ class TestAlertEvidenceIntegration(unittest.TestCase):
                 self.service.process_call_chunk(session.call_id, _high_chunk())
 
 
+    def test_ended_call_evidence_still_served(self):
+        # Regression: B4 must keep serving evidence/alerts after terminate
+        # (the frontend refetches them for history calls).
+        session = self._live_call("ended-evidence-1")
+        self.service.process_call_chunk(
+            session.call_id, _high_chunk("ended-evidence-1"))
+        status, before = view_get_evidence(
+            self.service, session.call_id, None)
+        self.assertEqual(status, 200)
+        self.assertTrue(before["evidence"])
+        self.service.terminate_call(session.call_id)
+        status, after = view_get_evidence(
+            self.service, session.call_id, None)
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            [r["evidence_id"] for r in after["evidence"]],
+            [r["evidence_id"] for r in before["evidence"]])
+        status, alerts = view_list_alerts(
+            self.service, session.call_id, None)
+        self.assertEqual(status, 200)
+        self.assertIsInstance(alerts["alerts"], list)
+
+
 if __name__ == "__main__":
     unittest.main()

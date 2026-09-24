@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Disc, ShieldAlert, FileText, CheckCircle2, Download } from 'lucide-react';
 import { useCallContext } from '../../context/CallContext';
 import { EvidencePlayer } from '../common/EvidencePlayer';
@@ -49,14 +49,33 @@ const BackendEvidenceCard: React.FC<{ record: BackendEvidenceRecord }> = ({ reco
 );
 
 export const EvidenceView: React.FC = () => {
-  const { activeCalls, selectedCall, backendEvidence } = useCallContext();
+  const { activeCalls, selectedCall, backendEvidence, callHistory, currentCallId, refreshBackendIntel, intelErrors, isDemoMode } = useCallContext();
 
-  const currentCall = selectedCall || activeCalls[0];
+  // Ended/history calls are selectable too: B4 keeps serving their
+  // evidence after terminate, so resolve the explicitly selected id from
+  // history when it is no longer active.
+  const historyCall = !selectedCall && currentCallId
+    ? callHistory.find(c => c.id === currentCallId) ?? null
+    : null;
+  const currentCall = selectedCall || activeCalls[0] || historyCall;
   const evidence = currentCall?.evidence;
   // Authoritative B4 records for the selected call (empty = none yet).
   const b4Records = currentCall ? backendEvidence[currentCall.id] ?? [] : [];
+  const intelError = currentCall ? intelErrors[currentCall.id] : undefined;
+  const isEndedView = !!currentCall && !activeCalls.some(c => c.id === currentCall.id);
 
-  if (!evidence && b4Records.length === 0) {
+  // Explicit ended-call retrieval: caches are purged on endCall and the
+  // live path only tracks active calls, so fetch this ENDED call's own B4
+  // records by authoritative id (bounded + deduped inside). Never fires
+  // in demo theater; never fabricates when the backend has no records.
+  useEffect(() => {
+    if (isDemoMode || !currentCall || !isEndedView) return;
+    if ((backendEvidence[currentCall.id] ?? []).length > 0) return;
+    if (intelErrors[currentCall.id]) return;
+    refreshBackendIntel(currentCall.id, true, true);
+  }, [isDemoMode, currentCall, isEndedView, backendEvidence, intelErrors, refreshBackendIntel]);
+
+  if (!evidence && b4Records.length === 0 && !intelError) {
     // Honest idle state: no backend evidence exists yet. The hardcoded
     // demo fixture is deliberately NOT used as a fallback here.
     return (
@@ -80,6 +99,32 @@ export const EvidenceView: React.FC = () => {
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
             Evidence appears here when the backend flags audio during a live call.
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (intelError && b4Records.length === 0) {
+    // Explicit backend failure (never silent, never fixtures): the fetch
+    // for this call's B4 records failed. Retry re-enters the same bounded
+    // authoritative fetch.
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="glass-panel" style={{ padding: '40px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#f87171' }}>
+            Evidence unavailable
+          </div>
+          <div className="font-mono" style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            {intelError}
+          </div>
+          {currentCall && (
+            <button
+              onClick={() => refreshBackendIntel(currentCall.id, true, isEndedView)}
+              style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid var(--border-medium)', borderRadius: '8px', padding: '8px 14px', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer', marginTop: '12px' }}
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     );

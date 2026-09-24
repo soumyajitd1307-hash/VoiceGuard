@@ -146,5 +146,16 @@ class TestRiskUpdateAdapter(unittest.TestCase):
             self.assertNotIn(invented, update)
 
 
+    def test_is_mock_propagated_verbatim(self):
+        mock_update = to_risk_update(_assess(build_backend3_signals(
+            detection_result=_detection(0.5))), timestamp=1.0)
+        self.assertTrue(mock_update["is_mock"])
+        real_update = to_risk_update(_assess(build_backend3_signals(
+            detection_result=_detection(0.5, label="uncertain",
+                                        is_mock=False))),
+            timestamp=1.0)
+        self.assertFalse(real_update["is_mock"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -32,6 +32,11 @@ export interface RiskUpdate {
   contextRisk: number; // 0-100 %
   confidence: ConfidenceLevel;
   monitoringState?: MonitoringState;
+  // Additive B4 provenance (verbatim from the assessment): true while the
+  // scoring detector is the development heuristic. Optional so older
+  // backends that omit it keep validating; absent means unknown, never
+  // "real". Used only to badge development provenance in the UI.
+  is_mock?: boolean;
   frequencyArtifacts?: number; // 0-100 %
   prosodyAnomaly?: number; // 0-100 %
   spectralFlux?: number;
@@ -91,6 +96,11 @@ export interface Call {
   packetLoss: number;
   latencyMs: number;
   isSimulatedDemo?: boolean;
+  // Detector provenance for this call's risk stream, latched from the
+  // latest RiskUpdate's additive is_mock flag. True = development
+  // heuristic (badge it); false = non-mock detector; undefined = unknown
+  // yet (e.g. mapped history records predate the flag — never assumed).
+  detectorIsMock?: boolean;
 }
 
 export interface SecurityAlert {
