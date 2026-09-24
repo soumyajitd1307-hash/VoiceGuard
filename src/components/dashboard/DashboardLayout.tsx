@@ -190,9 +190,11 @@ export const DashboardLayout: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Quick Demo Trigger for Hackathon presentation */}
-            <button
-              onClick={triggerHighRiskDemo}
+            {/* Demo-only trigger: hidden in live mode so simulated risk can
+                never be injected into a real call session. */}
+            {isDemoMode && (
+              <button
+                onClick={triggerHighRiskDemo}
               style={{
                 background: 'rgba(239, 68, 68, 0.15)',
                 border: '1px solid rgba(239, 68, 68, 0.4)',
@@ -210,7 +212,8 @@ export const DashboardLayout: React.FC = () => {
             >
               <Zap size={13} />
               Simulate High Risk (18s)
-            </button>
+              </button>
+            )}
           </div>
         </header>
 

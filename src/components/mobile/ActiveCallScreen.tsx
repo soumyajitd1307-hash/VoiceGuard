@@ -5,6 +5,7 @@ import { CallerAvatar } from '../common/CallerAvatar';
 import { RiskGauge } from '../common/RiskGauge';
 import { CallTimer } from '../common/CallTimer';
 import { getRiskLevel, getRiskTheme, getRiskStatusSummary } from '../../utils/risk';
+import { useCallContext } from '../../context/CallContext';
 
 /**
  * Real Backend 1 audio transport state, owned by MobileApp and derived
@@ -57,11 +58,28 @@ export const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
   const theme = getRiskTheme(call.currentRiskLevel);
   const summary = getRiskStatusSummary(call.currentRisk, call.confidence);
   const audioStatus = AUDIO_STATUS_META[audioState];
+  const { isDemoMode } = useCallContext();
+  // No fabricated initial risk: until the first real RiskUpdate lands
+  // (empty history, live mode), show a neutral monitoring state instead
+  // of a "verified" claim the backend never made.
+  const awaitingAnalysis = !isDemoMode && call.riskHistory.length === 0;
+  const bannerTitle = awaitingAnalysis ? 'AWAITING ANALYSIS' : summary.title;
+  const bannerRecommendation = awaitingAnalysis
+    ? 'Monitoring live audio — first backend assessment pending.'
+    : summary.recommendation;
 
-  // Live animated voice waveform simulation for the active call
-  const [waveHeights, setWaveHeights] = useState<number[]>([12, 24, 38, 18, 42, 28, 14, 32, 20]);
+  // Voice bars animate ONLY while real microphone frames are flowing
+  // (audioState === 'active', set by MobileApp from the actual capture
+  // lifecycle) or in demo theater mode. Otherwise they stay flat — random
+  // motion would fake live audio that isn't there.
+  const FLAT_BARS = [10, 10, 10, 10, 10, 10, 10, 10, 10];
+  const [waveHeights, setWaveHeights] = useState<number[]>(FLAT_BARS);
 
   useEffect(() => {
+    if (audioState !== 'active' && !isDemoMode) {
+      setWaveHeights(FLAT_BARS);
+      return;
+    }
     const interval = setInterval(() => {
       setWaveHeights(prev =>
         prev.map(() => {
@@ -71,7 +89,7 @@ export const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
       );
     }, 180);
     return () => clearInterval(interval);
-  }, [isHigh]);
+  }, [isHigh, audioState, isDemoMode]);
 
   return (
     <div
@@ -194,10 +212,10 @@ export const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           }}
         >
           <div style={{ fontSize: '12px', fontWeight: 800, color: theme.text, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            {summary.title}
+            {bannerTitle}
           </div>
           <div style={{ fontSize: '11px', color: isHigh ? '#fca5a5' : 'var(--text-muted)', marginTop: '2px' }}>
-            {summary.recommendation}
+            {bannerRecommendation}
           </div>
         </div>
       </div>
