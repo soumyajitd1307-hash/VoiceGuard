@@ -28,7 +28,21 @@
  */
 export const INTEL_THROTTLE_MS = 10000;
 
-export function resolveIntelFetch(args) {
+/**
+ * Arguments for resolveIntelFetch, mirroring the object built by
+ * CallContext.refreshBackendIntel (same field names and value shapes).
+ */
+export interface IntelFetchArgs {
+  callId: string;
+  isActive: boolean;
+  allowEnded: boolean;
+  nowMs: number;
+  lastFetchMs: number | undefined;
+  inflight: boolean;
+  force: boolean;
+}
+
+export function resolveIntelFetch(args: IntelFetchArgs) {
   const callId = args.callId;
   const isActive = args.isActive === true;
   const allowEnded = args.allowEnded === true;
