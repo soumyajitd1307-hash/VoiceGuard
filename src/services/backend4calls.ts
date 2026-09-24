@@ -21,7 +21,7 @@ import type { BackendAlert, BackendEvidenceRecord, Call, ConfidenceLevel, Monito
 const API_BASE =
   (typeof import.meta !== 'undefined'
     ? (import.meta.env?.VITE_API_BASE_URL as string | undefined)
-    : undefined) ?? 'http://localhost:8000/api/v1';
+    : undefined) || 'http://localhost:8000/api/v1';
 
 const REQUEST_TIMEOUT_MS = 10000;
 

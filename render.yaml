@@ -1,0 +1,26 @@
+# VoiceGuard unified backend on Render (one web service: B1..B4 + WebSockets).
+# Dashboard alternative: create a Web Service from this repo, runtime Docker,
+# Dockerfile path ./Dockerfile, health check path /health. Either way the
+# environment variables below are required.
+services:
+  - type: web
+    name: voiceguard-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Render injects PORT automatically; the container binds 0.0.0.0:$PORT.
+    healthCheckPath: /health
+    envVars:
+      # Public origin of the GitHub Pages frontend (explicit CORS allow-list).
+      - key: FRONTEND_ORIGIN
+        value: https://soumyajitd1307-hash.github.io
+      # Demo-grade defaults: in-memory stores, no auth (see docs/DEPLOYMENT.md).
+      # Do NOT set VG_ENV=production: it fail-closes (sqlite + auth required).
+      - key: VG_ENV
+        value: development
+      - key: VG_STORAGE_BACKEND
+        value: memory
+      - key: VG_AUTH_MODE
+        value: disabled
+      # Optional tuning (defaults in backend1/pipeline_driver.py apply):
+      # - key: P5_HTTP_TIMEOUT
+      #   value: 10

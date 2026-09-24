@@ -15,8 +15,9 @@ Run (dev):
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 
+from backend.cors import add_cors_middleware
 from backend1 import pipeline_driver
 from backend2.buffer import AudioBufferError, get_buffer_manager
 from backend1.signaling import SignalingHub
@@ -32,8 +33,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="VoiceGuard Backend 1 — Audio Ingestion", lifespan=lifespan)
+add_cors_middleware(app)
 buffer_manager = get_buffer_manager()
 signal_hub = SignalingHub()
+
+# Router carrying every Backend 1 route (also included by the unified
+# cloud app so one process serves B1 + B4 contracts unchanged).
+b1_router = APIRouter(tags=["voiceguard-b1"])
 
 # Single binary frames larger than a whole session budget are never
 # legitimate audio (a 250 ms frame is 8000 bytes); reject before buffering.
@@ -58,13 +64,13 @@ def validate_audio_frame(data: bytes) -> str | None:
     return None
 
 
-@app.get("/health")
+@b1_router.get("/health")
 def health() -> dict:
     """Liveness probe for Backend 1."""
     return {"status": "ok"}
 
 
-@app.websocket("/ws/signal")
+@b1_router.websocket("/ws/signal")
 async def ws_signal(websocket: WebSocket) -> None:
     """Two-person WebRTC signaling.
 
@@ -79,7 +85,7 @@ async def ws_signal(websocket: WebSocket) -> None:
     )
 
 
-@app.websocket("/ws/audio")
+@b1_router.websocket("/ws/audio")
 async def ws_audio(websocket: WebSocket) -> None:
     """Audio ingest endpoint: ``/ws/audio?session_id=<SESSION_ID>``."""
     await websocket.accept()
@@ -178,3 +184,7 @@ async def ws_audio(websocket: WebSocket) -> None:
         logger.info(
             "audio ws closed: session_id=%s frames_received=%d", session_id, seq
         )
+
+
+# Standalone dev process serves the same router (identical contracts).
+app.include_router(b1_router)

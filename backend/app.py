@@ -18,8 +18,10 @@ from fastapi import FastAPI
 from backend.api import api_router
 from backend.api import router as ml_router
 from backend.api import ws_router
+from backend.cors import add_cors_middleware
 
 app = FastAPI(title="VoiceGuard Backend")
+add_cors_middleware(app)
 
 app.include_router(ml_router)
 app.include_router(api_router)

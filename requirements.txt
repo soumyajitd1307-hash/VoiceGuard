@@ -1,0 +1,5 @@
+# VoiceGuard unified cloud backend (Render / Docker).
+# Backend 3 mock is stdlib-only; the web layer needs FastAPI + uvicorn.
+# uvicorn[standard] bundles websockets (required for /ws/*) and uvloop/httptools.
+fastapi
+uvicorn[standard]
