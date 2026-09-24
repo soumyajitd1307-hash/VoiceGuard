@@ -35,6 +35,19 @@ jobs:
         run: npm install
 
       - name: Build VoiceGuard
+        # Production backend origin: configure as GitHub Actions VARIABLES
+        # (repository Settings -> Secrets and variables -> Actions -> Variables):
+        #   VITE_API_BASE_URL  e.g. https://<render-service>.onrender.com/api/v1
+        #   VITE_WS_URL        e.g. wss://<render-service>.onrender.com/ws/calls
+        #   VITE_AUDIO_WS_URL  e.g. wss://<render-service>.onrender.com/ws/audio
+        #   VITE_SIGNAL_WS_URL e.g. wss://<render-service>.onrender.com/ws/signal
+        # Unset variables fall back to the localhost defaults in the services,
+        # so local `npm run build` behavior is unchanged.
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_WS_URL: ${{ vars.VITE_WS_URL }}
+          VITE_AUDIO_WS_URL: ${{ vars.VITE_AUDIO_WS_URL }}
+          VITE_SIGNAL_WS_URL: ${{ vars.VITE_SIGNAL_WS_URL }}
         run: npm run build
 
       - name: Setup GitHub Pages

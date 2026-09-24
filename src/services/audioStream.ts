@@ -19,7 +19,7 @@ function resolveBaseUrl(): string {
     typeof import.meta !== 'undefined'
       ? (import.meta.env?.VITE_AUDIO_WS_URL as string | undefined)
       : undefined;
-  return (fromEnv ?? DEFAULT_AUDIO_WS_URL).replace(/\/+$/, '');
+  return (fromEnv || DEFAULT_AUDIO_WS_URL).replace(/\/+$/, '');
 }
 
 export interface AudioStreamStats {
