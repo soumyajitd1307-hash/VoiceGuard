@@ -106,6 +106,12 @@ export function getRiskStatusSummary(score: number, confidence: ConfidenceLevel 
   };
 }
 
+export interface RiskHistoryPoint {
+  timestamp: number;
+  risk: number;
+  syntheticProbability: number;
+}
+
 export function formatSeconds(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -114,4 +120,25 @@ export function formatSeconds(seconds: number): string {
 
 export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
+}
+
+/**
+ * Append one B4 RiskUpdate to a call's risk history, verbatim.
+ * Values are copied exactly as received — no interpolation, no
+ * smoothing, no normalization, no fabricated points. History is capped
+ * at the newest 30 points. Pure (headless-testable).
+ */
+export function appendRiskPoint(
+  history: RiskHistoryPoint[],
+  point: { timestamp: number; risk: number; syntheticProbability: number },
+  cap = 30,
+): RiskHistoryPoint[] {
+  return [
+    ...history,
+    {
+      timestamp: point.timestamp,
+      risk: point.risk,
+      syntheticProbability: point.syntheticProbability,
+    },
+  ].slice(-cap);
 }
