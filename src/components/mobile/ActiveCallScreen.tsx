@@ -217,6 +217,13 @@ export const ActiveCallScreen: React.FC<ActiveCallScreenProps> = ({
           <div style={{ fontSize: '11px', color: isHigh ? '#fca5a5' : 'var(--text-muted)', marginTop: '2px' }}>
             {bannerRecommendation}
           </div>
+          {call.detectorIsMock === true && (
+            <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'center' }}>
+              <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontWeight: 700 }}>
+                Development heuristic — not a validated AI-voice verdict
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

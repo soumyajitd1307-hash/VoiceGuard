@@ -8,6 +8,7 @@ import { audioCapture } from '../services/audioCapture';
 import { audioStream } from '../services/audioStream';
 import { MOCK_ACTIVE_CALLS, MOCK_CALL_HISTORY, INITIAL_SYSTEM_STATUS, INITIAL_EVIDENCE_1042 } from '../services/mockData';
 import { getRiskLevel, formatSeconds, appendRiskPoint } from '../utils/risk';
+import { resolveIntelFetch } from '../utils/intel';
 
 interface CallContextType {
   activeCalls: Call[];
@@ -32,13 +33,17 @@ interface CallContextType {
   // its call_id) and per-call evidence snapshots. Never fabricated.
   backendAlerts: BackendAlert[];
   backendEvidence: Record<string, BackendEvidenceRecord[]>;
+  // Per-call intel fetch failures (evidence source): call id -> message.
+  // Lets views report backend errors explicitly instead of silently
+  // showing "no evidence". Cleared on the next fetch attempt/success.
+  intelErrors: Record<string, string>;
   // Actions
   selectCall: (callId: string) => void;
   startCall: (callerName?: string) => string;
   endCall: (callId?: string) => void;
   registerBackendCall: (summary: BackendCallSummary) => void;
   acknowledgeBackendAlert: (alertId: string) => Promise<void>;
-  refreshBackendIntel: (callId: string, force?: boolean) => void;
+  refreshBackendIntel: (callId: string, force?: boolean, allowEnded?: boolean) => void;
   refreshActiveCalls: (opts?: { silent?: boolean }) => Promise<void>;
   refreshCallHistory: (opts?: { silent?: boolean }) => Promise<void>;
   dismissAlert: () => void;
@@ -97,6 +102,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // render); evidence is snapshotted per call id (replaced on refresh).
   const [backendAlerts, setBackendAlerts] = useState<BackendAlert[]>([]);
   const [backendEvidence, setBackendEvidence] = useState<Record<string, BackendEvidenceRecord[]>>({});
+  const [intelErrors, setIntelErrors] = useState<Record<string, string>>({});
   // Prompt 8: B4 list sync state. idle = never fetched; loading = fetch in
   // flight; ready = last fetch succeeded (list may honestly be empty);
   // error = last explicit fetch failed (message in callsError).
@@ -204,6 +210,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         speakerConsistency,
         contextRisk,
         confidence: update.confidence,
+        // Latch the additive B4 provenance flag: true while the scoring
+        // detector is the development heuristic. Absent on older backends
+        // means unknown — never assumed real, never assumed mock.
+        detectorIsMock: update.is_mock ?? current.detectorIsMock,
         monitoringState: update.monitoringState || (update.risk >= 70 ? 'ALERT_TRIGGERED' : update.risk >= 40 ? 'SUSPICIOUS' : 'MONITORING_ACTIVE'),
         status: update.risk >= 70 ? 'FLAGGED' : current.status === 'FLAGGED' ? 'FLAGGED' : 'ACTIVE',
         detectionEvents: existingEvents,
@@ -247,26 +257,51 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /**
    * Refresh one call's B4 evidence + alerts (Prompt 7). Bounded: at most
    * one in-flight fetch per call and at most one refresh per 10 s per
-   * call unless forced. Failures keep the previous (possibly empty)
-   * state — never fixtures, never fabricated records.
+   * call unless forced (see resolveIntelFetch). Failures record an
+   * explicit per-call error and keep previous state — never fixtures,
+   * never fabricated records.
+   *
+   * allowEnded: explicit ended/history-call retrieval. B4 keeps serving
+   * evidence/alerts after terminate, but endCall purges caches and the
+   * live path only tracks active calls — so without this flag, ended
+   * calls could never show their B4 records again.
    */
-  const refreshBackendIntel = useCallback((callId: string, force = false) => {
-    if (!callId) return;
-    if (!activeIdsRef.current.includes(callId)) return; // isolation first
+  const refreshBackendIntel = useCallback((callId: string, force = false, allowEnded = false) => {
+    const verdict = resolveIntelFetch({
+      callId,
+      isActive: activeIdsRef.current.includes(callId),
+      allowEnded,
+      nowMs: Date.now(),
+      lastFetchMs: lastIntelFetchRef.current[callId],
+      inflight: intelInflightRef.current.has(callId),
+      force,
+    });
+    if (verdict.decision !== 'fetch') return;
     const now = Date.now();
-    if (!force && now - (lastIntelFetchRef.current[callId] ?? 0) < 10000) return;
-    if (intelInflightRef.current.has(callId)) return;
     intelInflightRef.current.add(callId);
     lastIntelFetchRef.current[callId] = now;
+    setIntelErrors(prev => {
+      if (!(callId in prev)) return prev;
+      const rest = { ...prev };
+      delete rest[callId];
+      return rest;
+    });
     void Promise.allSettled([getCallEvidence(callId), getCallAlerts(callId)]).then(
       ([ev, al]) => {
         intelInflightRef.current.delete(callId);
-        if (!activeIdsRef.current.includes(callId)) return; // ended mid-flight
+        // Live path only: results landing after the call ended mid-flight
+        // must not resurrect its caches (explicit ended fetches bypass by
+        // re-entering through allowEnded on the next user action).
+        if (!allowEnded && !activeIdsRef.current.includes(callId)) return; // ended mid-flight
         if (ev.status === 'fulfilled') {
           setBackendEvidence(prev => ({ ...prev, [callId]: ev.value }));
-        } else if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.warn(`[CallContext] evidence fetch failed for ${callId}:`, ev.reason);
+        } else {
+          const message = ev.reason instanceof Error ? ev.reason.message : 'Evidence unavailable.';
+          setIntelErrors(prev => ({ ...prev, [callId]: message }));
+          if (import.meta.env.DEV) {
+            // eslint-disable-next-line no-console
+            console.warn(`[CallContext] evidence fetch failed for ${callId}:`, ev.reason);
+          }
         }
         if (al.status === 'fulfilled') {
           setBackendAlerts(prev => mergeBackendAlerts(prev, al.value, callId));
@@ -700,6 +735,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         detectionEventsLog,
         backendAlerts,
         backendEvidence,
+        intelErrors,
         activeCallsStatus,
         callHistoryStatus,
         callsError,

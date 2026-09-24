@@ -331,5 +331,34 @@ class TestRiskFusion(unittest.TestCase):
         self.assertIsNotNone(assessment.risk_score)
 
 
+class TestRiskCharacterization(unittest.TestCase):
+    """Pin the CURRENT p -> risk mapping for the live-call shape.
+
+    Synthetic-only bundle (no enrolled reference, as in live calls):
+    risk_score == p * 100 with LOW <40 / MEDIUM <70 / HIGH bands.
+    Characterization, not validation: the formula is a documented
+    development heuristic, so any future change must be a deliberate,
+    reviewed diff that updates this table.
+    """
+
+    def test_probability_to_band_mapping(self):
+        cases = [
+            (0.00, "real", 0.0, "LOW"),
+            (0.25, "real", 25.0, "LOW"),
+            (0.50, "uncertain", 50.0, "MEDIUM"),
+            (0.75, "synthetic", 75.0, "HIGH"),
+            (1.00, "synthetic", 100.0, "HIGH"),
+        ]
+        for probability, label, expected_score, expected_level in cases:
+            with self.subTest(p=probability):
+                assessment = _assess(build_backend3_signals(
+                    detection_result=_detection(probability, label=label)))
+                self.assertAlmostEqual(assessment.risk_score, expected_score)
+                self.assertEqual(assessment.risk_level, expected_level)
+                # Detector probability must reach the final score verbatim.
+                self.assertAlmostEqual(
+                    assessment.synthetic_probability, probability)
+
+
 if __name__ == "__main__":
     unittest.main()
