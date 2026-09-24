@@ -8,6 +8,7 @@ import { formatSeconds } from '../../utils/risk';
 interface HomeScreenProps {
   onStartCall: () => void;
   startDisabled?: boolean;
+  onJoinPeerCall?: () => void;
   onOpenCallHistory: () => void;
   onOpenCallDetails: (call: Call) => void;
   recentCalls: Call[];
@@ -16,6 +17,7 @@ interface HomeScreenProps {
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onStartCall,
   startDisabled = false,
+  onJoinPeerCall,
   onOpenCallHistory,
   onOpenCallDetails,
   recentCalls
@@ -137,13 +139,57 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               Start Secure Call
             </div>
             <div style={{ fontSize: '12px', color: '#e0f2fe' }}>
-              Launch live WebRTC session with Rahul (#1042)
+              Capture live microphone audio for real-time analysis
             </div>
           </div>
         </div>
 
         <ChevronRight size={20} color="#ffffff" />
       </button>
+
+      {/* Person-to-person WebRTC call (two browsers, same call ID) */}
+      {onJoinPeerCall && (
+        <button
+          onClick={onJoinPeerCall}
+          style={{
+            background: 'rgba(56, 189, 248, 0.1)',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            borderRadius: '16px',
+            padding: '14px 20px',
+            color: '#ffffff',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left' }}>
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '12px',
+                background: 'rgba(56, 189, 248, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <User size={20} color="#38bdf8" />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '0.02em' }}>
+                Join Peer Call
+              </div>
+              <div style={{ fontSize: '12px', color: '#93c5fd' }}>
+                Direct browser-to-browser audio call
+              </div>
+            </div>
+          </div>
+
+          <ChevronRight size={20} color="#38bdf8" />
+        </button>
+      )}
 
       {/* Recent Calls Section */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

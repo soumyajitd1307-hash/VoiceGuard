@@ -33,7 +33,7 @@ export interface AudioStreamStats {
   lastAckSeq: number | null;
 }
 
-class AudioStreamService {
+export class AudioStreamService {
   private socket: WebSocket | null = null;
   private sessionId: string | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -118,6 +118,13 @@ class AudioStreamService {
         if (settled) return;
         settled = true;
         window.clearTimeout(timer);
+        // Fresh session: reset cumulative counters so diagnostics describe
+        // THIS connection (sessionId already updated above), not history.
+        this.framesSent = 0;
+        this.bytesSent = 0;
+        this.droppedFrames = 0;
+        this.ackCount = 0;
+        this.lastAckSeq = null;
         if (import.meta.env.DEV) {
           // eslint-disable-next-line no-console
           console.info(`[audioStream] connected: session_id=${sessionId}`);

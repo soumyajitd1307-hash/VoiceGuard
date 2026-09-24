@@ -315,6 +315,34 @@ def view_create_call(service: CallService, owner_id: str,
     return (200, session.to_frontend_dict())
 
 
+def view_ingest_chunk(service: CallService, call_id: str,
+                      payload: Any, owner_id: str | None = None) -> tuple:
+    """Live-driver ingest: one B2-packaged chunk dict through the full
+    B3+B4 path (detection, risk, evidence, alert, audit, publish).
+
+    The payload must be the B2 ``ProcessedSpeechChunk`` wire form
+    (``from_dict``-compatible); the call must exist and be active.
+    Unknown calls -> 404, terminated/malformed/misrouted chunks -> 400.
+    Storage/model failures propagate to the adapter (500), unchanged.
+    """
+    if not isinstance(payload, dict):
+        return (400, {"detail": "chunk payload must be a JSON object"})
+    try:
+        service.calls.get_call(call_id, owner_id)
+    except ValidationError:
+        return _not_found()
+    try:
+        result = service.process_call_chunk(call_id, payload, owner_id=owner_id)
+    except ValidationError as exc:
+        return (400, {"detail": str(exc)})
+    return (200, {
+        "ok": True,
+        "call_id": call_id,
+        "chunk_id": result.assessment.chunk_id,
+        "risk_update": result.risk_update,
+    })
+
+
 def view_system_status(service: CallService) -> tuple:
     """Development-safe status with real B3 provenance and honest flags."""
     from backend.detector import get_detector

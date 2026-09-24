@@ -7,21 +7,27 @@ import { CallTimer } from '../common/CallTimer';
 import { getRiskTheme } from '../../utils/risk';
 
 export const LiveMonitoringView: React.FC = () => {
-  const { selectedCall, activeCalls } = useCallContext();
+  const { selectedCall, activeCalls, isDemoMode } = useCallContext();
   const call = selectedCall || activeCalls[0];
 
-  const [spectrogramBars, setSpectrogramBars] = useState<number[]>(
-    Array.from({ length: 32 }, () => Math.floor(Math.random() * 60) + 10)
-  );
+  // Spectrogram animates ONLY in demo theater mode. In live mode there is
+  // no spectral telemetry yet, so bars stay static — random motion would
+  // fake a signal that isn't there.
+  const FLAT_SPECTRUM = Array.from({ length: 32 }, () => 12);
+  const [spectrogramBars, setSpectrogramBars] = useState<number[]>(FLAT_SPECTRUM);
 
   useEffect(() => {
+    if (!isDemoMode) {
+      setSpectrogramBars(FLAT_SPECTRUM);
+      return;
+    }
     const interval = setInterval(() => {
       setSpectrogramBars(prev =>
         prev.map(() => Math.floor(Math.random() * 65) + 10)
       );
     }, 120);
     return () => clearInterval(interval);
-  }, []);
+  }, [isDemoMode]);
 
   if (!call) {
     return <div style={{ padding: '40px', textAlign: 'center' }}>No active monitoring streams.</div>;

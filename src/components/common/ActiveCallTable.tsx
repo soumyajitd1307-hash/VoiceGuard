@@ -40,6 +40,16 @@ export const ActiveCallTable: React.FC<ActiveCallTableProps> = ({
           </tr>
         </thead>
         <tbody>
+          {calls.length === 0 && (
+            <tr>
+              <td
+                colSpan={7}
+                style={{ padding: '20px 14px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '13px' }}
+              >
+                No active calls. Start a secure call from the mobile client to begin live monitoring.
+              </td>
+            </tr>
+          )}
           {calls.map(call => {
             const isSelected = call.id === selectedCallId;
             const isHigh = call.currentRiskLevel === 'HIGH';

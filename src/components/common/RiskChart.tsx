@@ -22,9 +22,11 @@ export const RiskChart: React.FC<RiskChartProps> = ({
   showThresholds = true,
   showLabels = true
 }) => {
-  // Ensure we have at least 2 points to draw
-  const safeData = data.length > 0 ? data : [{ timestamp: 0, risk: 18 }];
-  const points = safeData.length === 1 ? [{ timestamp: 0, risk: safeData[0].risk }, { timestamp: 1, risk: safeData[0].risk }] : safeData;
+  // Empty data renders an honest empty grid (axes + thresholds only).
+  // Previously this drew a fabricated {risk: 18} baseline point — removed:
+  // with no backend telemetry the chart must show no curve at all.
+  const hasData = data.length > 0;
+  const points: DataPoint[] = hasData ? data : [{ timestamp: 0, risk: 0 }, { timestamp: 1, risk: 0 }];
 
   const maxTime = Math.max(20, Math.max(...points.map(p => p.timestamp)));
   const minTime = 0;
@@ -131,42 +133,59 @@ export const RiskChart: React.FC<RiskChartProps> = ({
           </>
         )}
 
-        {/* Area fill under curve */}
-        <path d={areaD} fill="url(#riskAreaGrad)" />
+        {/* Area fill under curve (real data only — never a fabricated baseline) */}
+        {hasData && <path d={areaD} fill="url(#riskAreaGrad)" />}
 
         {/* Risk curve line */}
-        <path
-          d={pathD}
-          fill="none"
-          stroke={currentTheme.primary}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{
-            filter: `drop-shadow(0 0 6px ${currentTheme.primary})`,
-            transition: 'all 0.3s ease'
-          }}
-        />
+        {hasData && (
+          <path
+            d={pathD}
+            fill="none"
+            stroke={currentTheme.primary}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              filter: `drop-shadow(0 0 6px ${currentTheme.primary})`,
+              transition: 'all 0.3s ease'
+            }}
+          />
+        )}
 
         {/* Data points */}
-        {points.map((p, idx) => {
-          const isLatest = idx === points.length - 1;
-          const pTheme = getRiskTheme(p.risk);
-          return (
-            <circle
-              key={idx}
-              cx={getX(p.timestamp)}
-              cy={getY(p.risk)}
-              r={isLatest ? 5 : 2.5}
-              fill={pTheme.primary}
-              stroke="#080c14"
-              strokeWidth={isLatest ? 2 : 1}
-              style={{
-                filter: isLatest ? `drop-shadow(0 0 8px ${pTheme.primary})` : 'none'
-              }}
-            />
-          );
-        })}
+        {hasData &&
+          points.map((p, idx) => {
+            const isLatest = idx === points.length - 1;
+            const pTheme = getRiskTheme(p.risk);
+            return (
+              <circle
+                key={idx}
+                cx={getX(p.timestamp)}
+                cy={getY(p.risk)}
+                r={isLatest ? 5 : 2.5}
+                fill={pTheme.primary}
+                stroke="#080c14"
+                strokeWidth={isLatest ? 2 : 1}
+                style={{
+                  filter: isLatest ? `drop-shadow(0 0 8px ${pTheme.primary})` : 'none'
+                }}
+              />
+            );
+          })}
+
+        {/* Honest empty state: grid only, no curve */}
+        {!hasData && (
+          <text
+            x={viewBoxWidth / 2}
+            y={padding.top + chartHeight / 2}
+            textAnchor="middle"
+            fill="var(--text-dim)"
+            fontSize="11"
+            fontFamily="var(--font-mono)"
+          >
+            No risk data yet
+          </text>
+        )}
 
         {/* X axis labels */}
         {showLabels && (

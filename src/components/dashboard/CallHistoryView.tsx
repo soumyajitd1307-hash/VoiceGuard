@@ -4,15 +4,18 @@ import { useCallContext } from '../../context/CallContext';
 import { RiskBadge } from '../common/RiskBadge';
 import { CallerAvatar } from '../common/CallerAvatar';
 import { formatSeconds } from '../../utils/risk';
+import { LoadingState, ErrorState, EmptyState } from '../common/FeedbackStates';
 
 export const CallHistoryView: React.FC = () => {
-  const { callHistory, openInvestigation } = useCallContext();
+  const { callHistory, openInvestigation, callHistoryStatus, callsError, refreshCallHistory } = useCallContext();
   const [searchTerm, setSearchTerm] = useState('');
 
   const filtered = callHistory.filter(c =>
     c.caller.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.id.includes(searchTerm)
   );
+  const showLoading = callHistoryStatus === 'loading' && callHistory.length === 0;
+  const showError = callHistoryStatus === 'error' && callHistory.length === 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -40,10 +43,46 @@ export const CallHistoryView: React.FC = () => {
       </div>
 
       <div className="glass-panel" style={{ padding: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
-          Completed & Terminated Voice Calls Archive
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-main)' }}>
+            Completed & Terminated Voice Calls Archive
+          </h3>
+          <button
+            onClick={() => void refreshCallHistory()}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '6px',
+              padding: '5px 12px',
+              color: 'var(--text-muted)',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Refresh
+          </button>
+        </div>
 
+        {showLoading ? (
+          <LoadingState message="Loading call history from Backend 4..." />
+        ) : showError ? (
+          <ErrorState
+            title="Call history unavailable"
+            message={callsError || 'Could not reach Backend 4. No records were fabricated.'}
+            onRetry={() => void refreshCallHistory()}
+          />
+        ) : callHistory.length === 0 ? (
+          <EmptyState
+            title="No archived calls"
+            message="Backend 4 has no terminated sessions yet. Ended calls will appear here."
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            title="No matches"
+            message="No archived calls match your search."
+          />
+        ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {filtered.map(call => {
             const isHigh = call.currentRiskLevel === 'HIGH';
@@ -93,6 +132,7 @@ export const CallHistoryView: React.FC = () => {
             );
           })}
         </div>
+        )}
       </div>
     </div>
   );

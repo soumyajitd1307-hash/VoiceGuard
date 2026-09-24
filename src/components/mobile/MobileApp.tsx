@@ -7,15 +7,17 @@ import { Call, Evidence } from '../../types';
 import { SplashScreen } from './SplashScreen';
 import { HomeScreen } from './HomeScreen';
 import { ActiveCallScreen, LiveAudioState } from './ActiveCallScreen';
+import { PeerCallScreen } from './PeerCallScreen';
 import { CallEndScreen } from './CallEndScreen';
 import { CallHistoryScreen } from './CallHistoryScreen';
 import { CallDetailsScreen } from './CallDetailsScreen';
 import { EvidenceScreen } from './EvidenceScreen';
 
-export type MobileScreen = 
+export type MobileScreen =
   | 'splash'
   | 'home'
   | 'active_call'
+  | 'peer_call'
   | 'call_end'
   | 'history'
   | 'call_details'
@@ -94,7 +96,9 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
 
     // The call record is created first so the Backend 1 audio session uses
     // the ACTUAL generated call ID — never a hardcoded or fallback ID.
-    const callId = startCall('Rahul');
+    // No caller name is passed: without a contacts backend there is no
+    // verified caller, so the session starts as 'Unknown caller'.
+    const callId = startCall();
     setSessionCallId(callId);
     setEndedCall(null);
 
@@ -135,6 +139,11 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
   const handleEndCall = () => {
     // End the ACTUAL mobile session, not whatever happens to be selected.
     const targetId = sessionCallId ?? activeCall?.id;
+    if (!targetId) {
+      // Nothing live to end (e.g. already terminated elsewhere).
+      setCurrentScreen('home');
+      return;
+    }
     const targetCall =
       activeCalls.find((c) => c.id === targetId) ?? activeCall ?? null;
     // Order: capture first, then socket, then existing call teardown.
@@ -144,7 +153,7 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
     setEndedCall(targetCall);
     setSessionCallId(null);
     setLiveAudioState('disconnected');
-    setCurrentScreen('call_end');
+    setCurrentScreen(targetCall ? 'call_end' : 'home');
   };
 
   const handleOpenDetails = (call: Call) => {
@@ -158,6 +167,27 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
   };
 
   const showBottomNav = currentScreen !== 'splash' && currentScreen !== 'active_call';
+
+  // Shared home element: used as the honest fallback whenever a screen
+  // requires a call/evidence object that does not exist (empty live state).
+  const homeScreenElement = (
+    <HomeScreen
+      onStartCall={handleStartCall}
+      startDisabled={isStartingCall}
+      onJoinPeerCall={() => setCurrentScreen('peer_call')}
+      onOpenCallHistory={() => setCurrentScreen('history')}
+      onOpenCallDetails={handleOpenDetails}
+      recentCalls={[...activeCalls, ...callHistory]}
+    />
+  );
+
+  // Resolved snapshots for screens that require a call object. Each may be
+  // undefined in the empty live state — branches below fall back to home.
+  const activeCallForScreen = activeCall || activeCalls[0];
+  const endedCallForScreen = endedCall || activeCall || activeCalls[0];
+  const inspectedCallForScreen = inspectedCall || activeCall || activeCalls[0];
+  const evidenceForScreen =
+    inspectedEvidence || activeCall?.evidence || activeCalls[0]?.evidence;
 
   return (
     <div className={embeddedInShell ? 'mobile-device-wrapper' : 'w-full h-full'}>
@@ -253,42 +283,51 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
             <SplashScreen onContinue={() => setCurrentScreen('home')} />
           )}
 
-          {currentScreen === 'home' && (
-            <HomeScreen
-              onStartCall={handleStartCall}
-              startDisabled={isStartingCall}
-              onOpenCallHistory={() => setCurrentScreen('history')}
-              onOpenCallDetails={handleOpenDetails}
-              recentCalls={[...activeCalls, ...callHistory]}
-            />
+          {currentScreen === 'home' && homeScreenElement}
+
+          {currentScreen === 'peer_call' && (
+            <PeerCallScreen onLeave={() => setCurrentScreen('home')} />
           )}
 
-          {currentScreen === 'active_call' && (
-            <ActiveCallScreen
-              call={activeCall || activeCalls[0]}
-              onEndCall={handleEndCall}
-              audioState={liveAudioState}
-              onOpenEvidence={() => {
-                if (activeCall?.evidence) {
-                  handleOpenEvidence(activeCall.evidence);
-                }
-              }}
-            />
-          )}
+          {currentScreen === 'active_call' &&
+            (activeCallForScreen ? (
+              <ActiveCallScreen
+                call={activeCallForScreen}
+                onEndCall={handleEndCall}
+                audioState={liveAudioState}
+                onOpenEvidence={() => {
+                  if (activeCall?.evidence) {
+                    handleOpenEvidence(activeCall.evidence);
+                  }
+                }}
+              />
+            ) : (
+              homeScreenElement
+            ))}
 
-          {currentScreen === 'call_end' && (
-            <CallEndScreen
-              call={endedCall || activeCall || activeCalls[0]}
-              onGoHome={() => setCurrentScreen('home')}
-              onViewReport={() => handleOpenDetails(endedCall || activeCall || activeCalls[0])}
-              onPlayEvidence={() => {
-                const ended = endedCall || activeCall;
-                if (ended?.evidence) {
-                  handleOpenEvidence(ended.evidence);
-                }
-              }}
-            />
-          )}
+          {currentScreen === 'call_end' &&
+            (endedCallForScreen ? (
+              <CallEndScreen
+                call={endedCallForScreen}
+                onGoHome={() => setCurrentScreen('home')}
+                onViewReport={() => {
+                  const target = endedCall || activeCall || activeCalls[0];
+                  if (target) {
+                    handleOpenDetails(target);
+                  } else {
+                    setCurrentScreen('home');
+                  }
+                }}
+                onPlayEvidence={() => {
+                  const ended = endedCall || activeCall;
+                  if (ended?.evidence) {
+                    handleOpenEvidence(ended.evidence);
+                  }
+                }}
+              />
+            ) : (
+              homeScreenElement
+            ))}
 
           {currentScreen === 'history' && (
             <CallHistoryScreen
@@ -298,20 +337,26 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
             />
           )}
 
-          {currentScreen === 'call_details' && (
-            <CallDetailsScreen
-              call={inspectedCall || activeCall || activeCalls[0]}
-              onBack={() => setCurrentScreen('home')}
-              onOpenEvidence={handleOpenEvidence}
-            />
-          )}
+          {currentScreen === 'call_details' &&
+            (inspectedCallForScreen ? (
+              <CallDetailsScreen
+                call={inspectedCallForScreen}
+                onBack={() => setCurrentScreen('home')}
+                onOpenEvidence={handleOpenEvidence}
+              />
+            ) : (
+              homeScreenElement
+            ))}
 
-          {currentScreen === 'evidence' && (
-            <EvidenceScreen
-              evidence={inspectedEvidence || activeCall?.evidence || activeCalls[0].evidence!}
-              onBack={() => setCurrentScreen('active_call')}
-            />
-          )}
+          {currentScreen === 'evidence' &&
+            (evidenceForScreen ? (
+              <EvidenceScreen
+                evidence={evidenceForScreen}
+                onBack={() => setCurrentScreen('active_call')}
+              />
+            ) : (
+              homeScreenElement
+            ))}
         </div>
 
         {/* Bottom Mobile Navigation Bar */}
