@@ -33,7 +33,8 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
     selectedCall,
     callHistory,
     startCall,
-    endCall
+    endCall,
+    isDemoMode
   } = useCallContext();
 
   const [currentScreen, setCurrentScreen] = useState<MobileScreen>('home');
@@ -88,6 +89,17 @@ export const MobileApp: React.FC<MobileAppProps> = ({ embeddedInShell = true }) 
   const startingRef = useRef(false);
 
   const handleStartCall = async () => {
+    // Production routing (live mode): the authoritative call identity must
+    // come from Backend 4 FIRST (POST /api/v1/calls). That flow lives in
+    // PeerCallScreen (create mode): B4 id -> WebRTC room -> B1 session ->
+    // risk WS, one id end to end. Entering it here guarantees the primary
+    // call CTA can never mint a `local-...` session id in live mode.
+    // Demo theater keeps the legacy local-mic session path below.
+    if (!isDemoMode) {
+      setAudioError(null);
+      setCurrentScreen('peer_call');
+      return;
+    }
     if (startingRef.current || isStartingCall) return;
     startingRef.current = true;
     setAudioError(null);
