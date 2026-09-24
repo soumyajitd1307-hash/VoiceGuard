@@ -17,6 +17,13 @@
  * touches the risk WebSocket (src/services/websocket.ts) or CallContext.
  * Pure helpers (resampleFloat32 / floatTo16BitPCM) are exported so the
  * 16 kHz math can be unit-tested outside a browser.
+ *
+ * Two entry points share one conversion graph:
+ *   start()            — owns a getUserMedia microphone stream.
+ *   startFromStream()  — borrows an existing MediaStream (e.g. a WebRTC
+ *                        remote peer stream). Borrowed tracks are NEVER
+ *                        stopped here; their owner (RTCPeerConnection)
+ *                        manages their lifetime.
  */
 
 export const TARGET_SAMPLE_RATE = 16000;
@@ -104,8 +111,10 @@ class VoiceGuardCapture extends AudioWorkletProcessor {
 registerProcessor('voiceguard-capture', VoiceGuardCapture);
 `;
 
-class AudioCaptureService {
+export class AudioCaptureService {
   private stream: MediaStream | null = null;
+  /** False when the stream is borrowed (remote peer): never stop its tracks. */
+  private ownsStream = true;
   private ctx: AudioContext | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private node: AudioWorkletNode | null = null;
@@ -190,12 +199,60 @@ class AudioCaptureService {
       throw new Error('audioCapture: start cancelled (stop requested during startup)');
     }
 
+    await this.attachStream(stream, onChunk, true, myGeneration, 'microphone');
+  }
+
+  /**
+   * Capture an existing MediaStream (e.g. a WebRTC remote peer stream)
+   * through the SAME mono -> 16 kHz -> Int16LE -> 250 ms framing graph.
+   * The stream is borrowed: stop() releases the AudioContext/nodes but
+   * never stops the stream's tracks (owned by the RTCPeerConnection).
+   */
+  public async startFromStream(
+    stream: MediaStream,
+    onChunk: AudioChunkCallback,
+  ): Promise<void> {
+    if (this.isRunning()) {
+      throw new Error('audioCapture: already running — call stop() first');
+    }
+    if (!stream || stream.getAudioTracks().length === 0) {
+      throw new Error('audioCapture: source stream has no audio tracks');
+    }
+    this.generation += 1;
+    const myGeneration = this.generation;
+    await this.attachStream(stream, onChunk, false, myGeneration, 'remote-peer');
+  }
+
+  private async attachStream(
+    stream: MediaStream,
+    onChunk: AudioChunkCallback,
+    ownsStream: boolean,
+    myGeneration: number,
+    sourceLabel: string,
+  ): Promise<void> {
+    const AudioCtor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioCtor) {
+      throw new Error('audioCapture: Web Audio API unavailable in this browser');
+    }
+    const releaseSource = () => {
+      if (ownsStream) {
+        try {
+          stream.getTracks().forEach((t) => t.stop());
+        } catch {
+          // ignore teardown errors
+        }
+      }
+    };
+
     const ctx = new AudioCtor({ latencyHint: 'interactive' });
     try {
       // Must resume explicitly: browsers create it suspended until a gesture.
       await ctx.resume();
       if (myGeneration !== this.generation) {
-        stream.getTracks().forEach((t) => t.stop());
+        releaseSource();
         await ctx.close().catch(() => undefined);
         throw new Error('audioCapture: start cancelled (stop requested during startup)');
       }
@@ -208,7 +265,7 @@ class AudioCaptureService {
       const url = URL.createObjectURL(blob);
       await ctx.audioWorklet.addModule(url);
       if (myGeneration !== this.generation) {
-        stream.getTracks().forEach((t) => t.stop());
+        releaseSource();
         URL.revokeObjectURL(url);
         await ctx.close().catch(() => undefined);
         throw new Error('audioCapture: start cancelled (stop requested during startup)');
@@ -223,6 +280,7 @@ class AudioCaptureService {
 
       // Commit state only after every step succeeded.
       this.stream = stream;
+      this.ownsStream = ownsStream;
       this.ctx = ctx;
       this.source = source;
       this.node = node;
@@ -235,12 +293,12 @@ class AudioCaptureService {
       if (import.meta.env.DEV) {
         // eslint-disable-next-line no-console
         console.info(
-          `[audioCapture] started: device ${ctx.sampleRate} Hz -> ` +
+          `[audioCapture] started (${sourceLabel}): device ${ctx.sampleRate} Hz -> ` +
             `${TARGET_SAMPLE_RATE} Hz mono Int16LE, frame ${FRAME_SAMPLES} samples`,
         );
       }
     } catch (err) {
-      stream.getTracks().forEach((t) => t.stop());
+      releaseSource();
       await ctx.close().catch(() => undefined);
       throw err instanceof Error
         ? err
@@ -274,7 +332,10 @@ class AudioCaptureService {
         const j = Math.floor(x);
         const frac = x - j;
         const a = this.pending[j];
-        const b = this.pending[j + 1];
+        // Guard the boundary sample exactly like resampleFloat32: without
+        // this, j+1 can read past the buffer and inject NaN (which would
+        // encode as a silent sample and be sent to B1 as if real audio).
+        const b = j + 1 < this.pending.length ? this.pending[j + 1] : a;
         out[i] = a + (b - a) * frac;
       }
       const pcm = floatTo16BitPCM(out);
@@ -315,7 +376,11 @@ class AudioCaptureService {
       ctx.close().catch(() => undefined);
     }
     if (this.stream) {
-      this.stream.getTracks().forEach((t) => t.stop());
+      // Borrowed (remote-peer) tracks belong to the RTCPeerConnection and
+      // must keep flowing to the call even after forwarding stops.
+      if (this.ownsStream) {
+        this.stream.getTracks().forEach((t) => t.stop());
+      }
       this.stream = null;
     }
     if (this.workletUrl) {
@@ -328,6 +393,10 @@ class AudioCaptureService {
     this.pending = [];
     this.consumedPos = 0;
     this.inputRate = 0;
+    // Reset per-session diagnostics so a later session never inherits
+    // earlier counts (frames/bytes are meaningful only per capture run).
+    this.framesEmitted = 0;
+    this.bytesEmitted = 0;
   }
 }
 
